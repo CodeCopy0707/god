@@ -1,71 +1,41 @@
-import pg from 'pg';
-const { Client } = pg;
+// Deep scan — find Sukh6565 UUID and all their bank_data records
+import { createClient } from '@supabase/supabase-js';
 
-const client = new Client({
-  connectionString: 'postgresql://postgres:SANDEEP%401717%23@db.zdcywmtcdrphhiynrpka.supabase.co:5432/postgres'
-});
+const supabase = createClient(
+  'https://zdcywmtcdrphhiynrpka.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpkY3l3bXRjZHJwaGhpeW5ycGthIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDIxNTY1NSwiZXhwIjoyMDg5NzkxNjU1fQ.K7pJPQ67dxo7LGYAOloqiiQ5WPAla5ORQYKOd-GUaK4',
+  { auth: { persistSession: false } }
+);
 
-async function run() {
-  try {
-    await client.connect();
-    console.log('Connected to DB');
+(async () => {
+  // 1. Find the user by login_id = Sukh6565
+  console.log('\n── Finding user Sukh6565 ──');
+  const { data: users, error: uErr } = await supabase
+    .from('users')
+    .select('id, name, login_id, role, agent_id, email')
+    .eq('login_id', 'Sukh6565');
 
-    // Get all tables
-    const res = await client.query(`
-      SELECT table_name 
-      FROM information_schema.tables 
-      WHERE table_schema = 'public'
-    `);
-    
-    const tables = res.rows.map(r => r.table_name);
-    console.log('Tables found:', tables);
-
-    // Search for Sukh6565 in any relevant looking table
-    for (const table of tables) {
-      if (['pg_stat_statements_info', 'pg_stat_statements'].includes(table)) continue;
-      
-      try {
-        // Just select 10 rows to see what's in there
-        // Or better, let's get columns to see if there's anything like user/agent/Sukh6565
-        const colsRes = await client.query(`
-          SELECT column_name, data_type 
-          FROM information_schema.columns 
-          WHERE table_name = $1
-        `, [table]);
-        
-        const cols = colsRes.rows.map(r => r.column_name);
-        
-        let hasPotentialText = false;
-        const textCols = colsRes.rows.filter(r => ['character varying', 'text'].includes(r.data_type)).map(r => r.column_name);
-
-        if (textCols.length > 0) {
-            const conditions = textCols.map(c => `"${c}" ILIKE '%Sukh6565%'`).join(' OR ');
-            const query = `SELECT * FROM "${table}" WHERE ${conditions} LIMIT 5`;
-            const dataRes = await client.query(query);
-            if (dataRes.rows.length > 0) {
-                console.log(`\n✅ FOUND "Sukh6565" in table: ${table}`);
-                console.log(JSON.stringify(dataRes.rows, null, 2));
-            } else {
-                // If it's something that looks like bank accounts, let's print 1 sample row anyway
-                if (table.includes('bank') || table.includes('account') || table.includes('subagent') || table.includes('data')) {
-                   const sampleRes = await client.query(`SELECT * FROM "${table}" LIMIT 1`);
-                   if (sampleRes.rows.length > 0) {
-                       console.log(`\n--- Sample from ${table} ---`);
-                       console.log(JSON.stringify(sampleRes.rows[0], null, 2));
-                   }
-                }
-            }
-        }
-      } catch (err) {
-        console.error(`Error querying table ${table}:`, err.message);
-      }
-    }
-
-  } catch (err) {
-    console.error('Connection error', err.stack);
-  } finally {
-    await client.end();
+  if (uErr || !users?.length) {
+    // Try by name
+    const { data: u2 } = await supabase.from('users').select('id,name,login_id,role,agent_id,email').ilike('name','%Sukh6565%');
+    console.log('By name search:', JSON.stringify(u2, null, 2));
+  } else {
+    console.log('User found:', JSON.stringify(users, null, 2));
   }
-}
 
-run();
+  // 2. Also try finding by login_id directly
+  const { data: byLogin } = await supabase.from('users').select('*').eq('login_id','Sukh6565');
+  console.log('\n── By login_id ──');
+  console.log(JSON.stringify(byLogin, null, 2));
+
+  // 3. Fetch bank_data for this user (all possible column references)
+  // We'll try uploaded_by, agent_id, subagent_id with both the login_id and UUID
+  console.log('\n── bank_data sample (5 rows) ──');
+  const { data: bankSample } = await supabase.from('bank_data').select('*').limit(5);
+  console.log(JSON.stringify(bankSample, null, 2));
+
+  // 4. Count total rows in bank_data
+  const { count } = await supabase.from('bank_data').select('*', { count: 'exact', head: true });
+  console.log(`\nTotal rows in bank_data: ${count}`);
+
+})();

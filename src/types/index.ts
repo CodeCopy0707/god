@@ -10,6 +10,10 @@ export interface PlatformConfig {
   pollIntervalMs: number;              // polling interval in ms
   maxPages: number;                    // max pages to fetch per poll
   pageSize: number;                    // results per page
+  useBearerAuth?: boolean;             // if true, use Authorization: Bearer <token>
+  apiStyle?: 'default' | 'modern';      // 'modern' uses page_num/page_size
+  customHeaders?: Record<string, string>; // extra headers
+  customParams?: Record<string, string>;  // override default query params
 }
 
 export interface Order {
@@ -28,10 +32,20 @@ export interface Order {
 }
 
 export interface DbAccount {
-  id: string;
-  acctNo: string;   // full account number stored in DB
-  ifsc: string;     // full IFSC stored in DB (match only first 4 chars)
-  name?: string;
+  id:           string;
+  acctNo:       string;        // mapped from account_number
+  ifsc:         string;        // mapped from ifsc_code (match only first 4 chars)
+  name?:        string;        // holder_name or additional_name
+  bankName?:    string | null;
+  mobileNumber?:string | null;
+  location?:    string | null;
+  subagentId?:  string | null;
+  subagentName?:string | null;
+  agentId?:     string | null;
+  agentName?:   string | null;
+  uploadedBy?:  string | null;
+  isUsed?:      boolean;
+  isDuplicate?: boolean;
   [key: string]: unknown;
 }
 
@@ -41,6 +55,7 @@ export interface RawOrderResponse {
     list?: RawOrder[];
     records?: RawOrder[];
     rows?: RawOrder[];
+    products?: RawOrder[];             // for "modern" API
     total?: number;
   };
   list?: RawOrder[];
@@ -68,4 +83,12 @@ export interface RawOrder {
   crt_date?: number | string;
   userId?: string;
   user_id?: string;
+  // Extra fields for new platforms
+  upi_account?: string;
+  upi?: string;
+  ifsc?: string;
+  name?: string;
+  account_name?: string;
+  status?: string | number;
+  created_at?: string | number;
 }

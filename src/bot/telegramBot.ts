@@ -17,8 +17,8 @@ export function getBot(): TelegramBot {
     throw new Error('TELEGRAM_BOT_TOKEN must be set in .env');
   }
 
-  _bot = new TelegramBot(token, { polling: false });
-  logger.info('Telegram bot initialised');
+  _bot = new TelegramBot(token, { polling: true });
+  logger.info('Telegram bot initialised (polling active)');
   return _bot;
 }
 
@@ -89,8 +89,9 @@ function buildMessage(order: Order): string {
   const time    = formatDate(order.crtDate);
 
   return [
+    `🏦 <b>PLATFORM: ${order.platform.toUpperCase()}</b>`,
+    `━━━━━━━━━━━━━━━━━━`,
     `🔔 <b>MATCH FOUND</b>`,
-    `🏦 <b>Platform:</b> ${order.platform}`,
     `💳 <b>Account:</b> ${order.acctNo}`,
     `🏛 <b>IFSC:</b> ${order.acctCode}`,
     `👤 <b>Name:</b> ${order.acctName}`,
@@ -118,5 +119,22 @@ export async function sendTelegramAlert(order: Order): Promise<void> {
   logger.info({ platform: order.platform, orderNo: order.orderNo },
     'Match queued for Telegram alert');
 
+  void processQueue();
+}
+
+export async function sendStartupGreeting(numPlatforms: number): Promise<void> {
+  const groupId = process.env.TELEGRAM_GROUP_ID;
+  if (!groupId) return;
+
+  const msg = `🤖 <b>SYSTEM RESTARTED</b>\n\n✅ <b>Matcher Online</b>\n📡 Monitoring <b>${numPlatforms}</b> platforms\n\n<i>Type /status to see live fetch metrics.</i>`;
+  queue.push({ chatId: groupId, message: msg, attempt: 1 });
+  void processQueue();
+}
+
+export async function sendRawMessage(msg: string): Promise<void> {
+  const groupId = process.env.TELEGRAM_GROUP_ID;
+  if (!groupId) return;
+
+  queue.push({ chatId: groupId, message: msg, attempt: 1 });
   void processQueue();
 }

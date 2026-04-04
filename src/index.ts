@@ -4,9 +4,9 @@
 
 import 'dotenv/config';
 import { activePlatforms as platforms } from './config/platforms.js';
-import { getBot }        from './bot/telegramBot.js';
+import { getBot, sendStartupGreeting, sendRawMessage } from './bot/telegramBot.js';
 import { loadAccounts }  from './db/supabase.js';
-import { startPolling }  from './orchestrator/poller.js';
+import { startPolling, getDashboardString }  from './orchestrator/poller.js';
 import { logger }        from './utils/logger.js';
 
 async function main(): Promise<void> {
@@ -54,7 +54,30 @@ async function main(): Promise<void> {
     + `${accountCount} accounts loaded.`,
   );
 
-  // ── 5. Graceful shutdown ───────────────────────────────────────────────
+  // ── 5. Wire up Telegram commands & trigger greeting ───────────────────
+  const bot = getBot();
+  bot.onText(/^\/status/, (msg) => {
+    if (msg.chat.id.toString() !== process.env.TELEGRAM_GROUP_ID) return;
+    
+    logger.info({ user: msg.from?.username }, 'Received /status command');
+    const dashboardHtml = getDashboardString();
+    
+    // Send it back immediately using the standard send API, bypassing the queue
+    // to ensure instantaneous feedback for commands
+    bot.sendMessage(msg.chat.id, dashboardHtml, { parse_mode: 'HTML' }).catch((err) => {
+      logger.error({ err }, 'Failed to send /status response');
+    });
+  });
+
+  // Send the startup greeting
+  void sendStartupGreeting(platforms.length);
+
+  // Send the immediate initial status to group to satisfy requirement that it shows on start
+  setTimeout(() => {
+    void sendRawMessage(getDashboardString());
+  }, 2000); // Give it a couple seconds to do the first fetch
+
+  // ── 6. Graceful shutdown ───────────────────────────────────────────────
   function gracefulShutdown(signal: string): void {
     logger.info({ signal }, 'Shutdown signal received — stopping pollers...');
     stop();

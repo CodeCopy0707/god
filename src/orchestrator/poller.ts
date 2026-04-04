@@ -17,6 +17,56 @@ function sleep(ms: number): Promise<void> {
 const SEEN_RESET_MS = () =>
   Number(process.env.SEEN_RESET_INTERVAL_MS ?? 300_000); // 5 minutes
 
+// ── Global status store ──────────────────────────────────────────────────
+interface PlatformStatus {
+  lastPoll:       Date | null;
+  lastRunSuccess: boolean;
+  lastResultsCount: number;
+  totalMatchesFound: number;
+}
+const statusMap = new Map<string, PlatformStatus>();
+
+function logStatusDashboard() {
+  const tableData = Array.from(statusMap.entries()).map(([id, status]) => ({
+    Platform: id,
+    Status:   status.lastRunSuccess ? '✅ OK' : '❌ FAIL',
+    Fetched:  status.lastResultsCount,
+    Matches:  status.totalMatchesFound,
+    Last_Poll: status.lastPoll?.toLocaleTimeString() ?? 'Never',
+  }));
+
+  console.log('\n📊 === [ PLATFORM SYSTEM DASHBOARD ] ===');
+  console.table(tableData);
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+}
+
+export function getDashboardString(): string {
+  if (statusMap.size === 0) return '<i>System is currently starting up...</i>';
+
+  const lines = ['📊 <b>PLATFORM SYSTEM DASHBOARD</b>', ''];
+  
+  let totalMatches = 0;
+  
+  for (const [id, status] of statusMap.entries()) {
+    const symbol = status.lastRunSuccess ? '✅' : '❌';
+    const fetched = status.lastResultsCount;
+    const matches = status.totalMatchesFound;
+    const time = status.lastPoll?.toLocaleTimeString() ?? 'Never';
+    
+    totalMatches += matches;
+
+    lines.push(`${symbol} <b>${id.toUpperCase()}</b>`);
+    lines.push(`├ Fetched: ${fetched}`);
+    lines.push(`├ Matches: ${matches}`);
+    lines.push(`└ Last: ${time}`);
+    lines.push(''); // blank line between platforms
+  }
+  
+  lines.push(`🏆 <b>Total System Matches: ${totalMatches}</b>`);
+  
+  return lines.join('\n');
+}
+
 // ── Single platform polling loop ──────────────────────────────────────────
 async function runPlatformLoop(
   platform: PlatformConfig,
@@ -38,8 +88,32 @@ async function runPlatformLoop(
       }
 
       // ── Fetch orders ───────────────────────────────────────────────────
-      const orders = await fetchAllPages(platform);
-      platformLog.debug({ count: orders.length }, 'Orders fetched');
+      let orders = [];
+      try {
+        orders = await fetchAllPages(platform, (pid, page, count) => {
+          platformLog.info(`[Page ${page}] 🔍 Found ${count} orders > 5k`);
+        });
+        
+        statusMap.set(platform.id, {
+          ...statusMap.get(platform.id)!,
+          lastPoll:       new Date(),
+          lastRunSuccess: true,
+          lastResultsCount: orders.length,
+        });
+
+      } catch (fetchErr) {
+        statusMap.set(platform.id, {
+          ...statusMap.get(platform.id)!,
+          lastPoll:       new Date(),
+          lastRunSuccess: false,
+          lastResultsCount: 0,
+        });
+        throw fetchErr; // Re-throw to be caught by the loop catch block
+      }
+      
+      if (orders.length > 0) {
+        platformLog.info({ count: orders.length }, '✅ All pages fetched');
+      }
 
       // ── Load current DB accounts (served from 60 s cache) ──────────────
       const dbAccounts = await loadAccounts();
@@ -54,6 +128,10 @@ async function runPlatformLoop(
         try {
           const match = matchOrder(order, dbAccounts);
           if (match) {
+            statusMap.set(platform.id, {
+              ...statusMap.get(platform.id)!,
+              totalMatchesFound: statusMap.get(platform.id)!.totalMatchesFound + 1,
+            });
             platformLog.info(
               { orderNo: order.orderNo, dbAccountId: match.id, amount: order.amount },
               '✅ Match found — sending alert',
@@ -67,6 +145,11 @@ async function runPlatformLoop(
       }
     } catch (loopErr) {
       platformLog.error({ loopErr }, 'Unhandled error in polling loop iteration');
+      statusMap.set(platform.id, {
+        ...statusMap.get(platform.id)!,
+        lastPoll:       new Date(),
+        lastRunSuccess: false,
+      });
     }
 
     // ── Wait before next poll ──────────────────────────────────────────
@@ -83,6 +166,13 @@ export function startPolling(
   const stopSignal = { stopped: false };
 
   for (const platform of configs) {
+    statusMap.set(platform.id, {
+      lastPoll:       null,
+      lastRunSuccess: true,
+      lastResultsCount: 0,
+      totalMatchesFound: 0,
+    });
+
     // Each loop runs independently — one failure doesn't affect others
     void runPlatformLoop(platform, stopSignal).catch(fatalErr => {
       logger.error({ fatalErr, platform: platform.id },
@@ -90,11 +180,15 @@ export function startPolling(
     });
   }
 
+  // ── Start periodic dashboard reporter ───────────────────────────────
+  const dashboardInterval = setInterval(logStatusDashboard, 30_000); // Every 30s
+
   logger.info({ count: configs.length }, 'All platform polling loops started');
 
   return {
     stop: () => {
       stopSignal.stopped = true;
+      clearInterval(dashboardInterval);
       logger.info('Stop signal sent to all polling loops');
     },
   };
