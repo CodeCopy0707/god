@@ -1,52 +1,113 @@
 // ============================================================
-// Shared Interfaces — Payment Order Matching System
+// Shared Interfaces - Payment Order Matching System
 // ============================================================
 
 export interface PlatformConfig {
-  id: string;                          // unique name e.g. "tivrapay"
-  baseUrl: string;                     // API endpoint
-  token: string;                       // indiatoken header value
-  headers?: Record<string, string>;    // any extra headers
-  pollIntervalMs: number;              // polling interval in ms
-  maxPages: number;                    // max pages to fetch per poll
-  pageSize: number;                    // results per page
-  useBearerAuth?: boolean;             // if true, use Authorization: Bearer <token>
-  apiStyle?: 'default' | 'modern';      // 'modern' uses page_num/page_size
-  customHeaders?: Record<string, string>; // extra headers
-  customParams?: Record<string, string>;  // override default query params
+  id: string;
+  baseUrl: string;
+  token: string;
+  headers?: Record<string, string>;
+  pollIntervalMs: number;
+  maxPages: number;
+  pageSize: number;
+  useBearerAuth?: boolean;
+  apiStyle?: 'default' | 'modern';
+  customHeaders?: Record<string, string>;
+  customParams?: Record<string, string>;
 }
 
 export interface Order {
   platform: string;
   orderNo: string;
   rptNo?: string;
-  acctNo: string;      // bank account number
-  acctCode: string;    // IFSC code
+  acctNo: string;
+  acctCode: string;
   acctName: string;
   amount: number;
   realAmount?: number;
   reward?: number;
   orderState: number;
-  crtDate: number;     // unix timestamp
+  crtDate: number;
   userId?: string;
 }
 
 export interface DbAccount {
-  id:           string;
-  acctNo:       string;        // mapped from account_number
-  ifsc:         string;        // mapped from ifsc_code (match only first 4 chars)
-  name?:        string;        // holder_name or additional_name
-  bankName?:    string | null;
-  mobileNumber?:string | null;
-  location?:    string | null;
-  subagentId?:  string | null;
-  subagentName?:string | null;
-  agentId?:     string | null;
-  agentName?:   string | null;
-  uploadedBy?:  string | null;
-  isUsed?:      boolean;
+  id: string;
+  acctNo: string;
+  ifsc: string;
+  name?: string;
+  bankName?: string | null;
+  mobileNumber?: string | null;
+  location?: string | null;
+  subagentId?: string | null;
+  subagentName?: string | null;
+  agentId?: string | null;
+  agentName?: string | null;
+  uploadedBy?: string | null;
+  isUsed?: boolean;
   isDuplicate?: boolean;
   [key: string]: unknown;
+}
+
+export type MatchKey = string;
+export type DbAccountMatchIndex = Map<MatchKey, DbAccount[]>;
+
+export interface AccountSnapshot {
+  accounts: DbAccount[];
+  matchIndex: DbAccountMatchIndex;
+  fetchedAt: number;
+}
+
+export interface PlatformStatusSnapshot {
+  platformId: string;
+  lastPoll: string | null;
+  lastRunSuccess: boolean;
+  lastResultsCount: number;
+  totalMatchesFound: number;
+}
+
+export interface ObservedOrderEvent {
+  eventKey: string;
+  platform: string;
+  orderNo: string;
+  rptNo?: string;
+  acctNo: string;
+  acctCode: string;
+  acctName: string;
+  amount: number;
+  realAmount?: number;
+  reward?: number;
+  orderState: number;
+  crtDate: number;
+  userId?: string;
+  receivedAt: string;
+  matched: boolean;
+  matchedAt?: string;
+  matchedAccountId?: string;
+  matchedAccountNo?: string;
+  matchedIfsc?: string;
+  matchedHolderName?: string;
+  matchedBankName?: string;
+  matchedSubagentId?: string;
+  matchedSubagentName?: string;
+}
+
+export interface DashboardSnapshot {
+  generatedAt: string;
+  targetSubagentId: string | null;
+  accountCount: number;
+  matchBucketCount: number;
+  totalObservedOrders: number;
+  totalMatchedOrders: number;
+  recentOrders: ObservedOrderEvent[];
+  recentMatches: ObservedOrderEvent[];
+  platforms: PlatformStatusSnapshot[];
+  storage: {
+    enabled: boolean;
+    mode: 'supabase' | 'runtime';
+    table: string;
+    state: string;
+  };
 }
 
 export interface RawOrderResponse {
@@ -55,7 +116,7 @@ export interface RawOrderResponse {
     list?: RawOrder[];
     records?: RawOrder[];
     rows?: RawOrder[];
-    products?: RawOrder[];             // for "modern" API
+    products?: RawOrder[];
     total?: number;
   };
   list?: RawOrder[];
@@ -83,7 +144,6 @@ export interface RawOrder {
   crt_date?: number | string;
   userId?: string;
   user_id?: string;
-  // Extra fields for new platforms
   upi_account?: string;
   upi?: string;
   ifsc?: string;

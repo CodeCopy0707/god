@@ -1,53 +1,100 @@
 // ============================================================
-// Matching Engine — IFSC prefix (4 chars) + last-4 acctNo
+// Matching Engine - IFSC prefix (4 chars) + last-4 acctNo
 // ============================================================
 
-import type { Order, DbAccount } from '../types/index.js';
+import type {
+  DbAccount,
+  DbAccountMatchIndex,
+  MatchKey,
+  Order,
+} from '../types/index.js';
 import { logger } from '../utils/logger.js';
 
-/**
- * Match an order against a list of DB accounts.
- *
- * BOTH conditions must be true:
- *  1. Last 4 digits of account number match
- *  2. First 4 characters of IFSC match (identifies the BANK, not branch)
- *
- * Returns the first matching DbAccount, or null if no match.
- */
-export function matchOrder(order: Order, dbAccounts: DbAccount[]): DbAccount | null {
+function normaliseAccountTail(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+
+  const digitsOnly = trimmed.replace(/\D/g, '');
+  const source = digitsOnly.length >= 4
+    ? digitsOnly
+    : trimmed.replace(/\s+/g, '');
+
+  return source.slice(-4);
+}
+
+function normaliseIfscPrefix(value: string): string {
+  return value.trim().replace(/\s+/g, '').toUpperCase().slice(0, 4);
+}
+
+export function getMatchKey(acctNo: string, ifsc: string): MatchKey | null {
+  const acctLast4 = normaliseAccountTail(acctNo);
+  const ifscPrefix = normaliseIfscPrefix(ifsc);
+
+  if (acctLast4.length < 4 || ifscPrefix.length < 4) {
+    return null;
+  }
+
+  return `${ifscPrefix}|${acctLast4}`;
+}
+
+export function buildAccountMatchIndex(
+  dbAccounts: DbAccount[],
+): DbAccountMatchIndex {
+  const matchIndex: DbAccountMatchIndex = new Map();
+
+  for (const account of dbAccounts) {
+    const key = getMatchKey(account.acctNo, account.ifsc);
+    if (!key) continue;
+
+    const bucket = matchIndex.get(key);
+    if (bucket) {
+      bucket.push(account);
+    } else {
+      matchIndex.set(key, [account]);
+    }
+  }
+
+  logger.info({
+    accounts: dbAccounts.length,
+    matchBuckets: matchIndex.size,
+  }, 'Account match index built');
+
+  return matchIndex;
+}
+
+function pickBestMatch(candidates: DbAccount[]): DbAccount | null {
+  if (candidates.length === 0) return null;
+
+  return candidates.find(candidate => !candidate.isDuplicate)
+    ?? candidates[0]
+    ?? null;
+}
+
+export function matchOrder(
+  order: Order,
+  matchIndex: DbAccountMatchIndex,
+): DbAccount | null {
   try {
-    const orderAcctLast4  = order.acctNo.trim().slice(-4);
-    const orderIfscPrefix = order.acctCode.trim().toUpperCase().slice(0, 4);
+    const key = getMatchKey(order.acctNo, order.acctCode);
+    if (!key) return null;
 
-    if (!orderAcctLast4 || orderAcctLast4.length < 4) return null;
-    if (!orderIfscPrefix || orderIfscPrefix.length < 4) return null;
-
-    for (const account of dbAccounts) {
-      try {
-        const dbAcctLast4  = account.acctNo.trim().slice(-4);
-        const dbIfscPrefix = account.ifsc.trim().toUpperCase().slice(0, 4);
-
-        const acctMatch = orderAcctLast4 === dbAcctLast4;
-        const ifscMatch = orderIfscPrefix === dbIfscPrefix;
-
-        if (acctMatch && ifscMatch) {
-          logger.debug({
-            orderNo:    order.orderNo,
-            platform:   order.platform,
-            acctLast4:  orderAcctLast4,
-            ifscPrefix: orderIfscPrefix,
-            dbId:       account.id,
-          }, 'Order matched');
-          return account;
-        }
-      } catch (innerErr) {
-        logger.warn({ innerErr, accountId: account.id },
-          'Error comparing individual account, skipping');
-        continue;
-      }
+    const candidates = matchIndex.get(key);
+    if (!candidates || candidates.length === 0) {
+      return null;
     }
 
-    return null;
+    const match = pickBestMatch(candidates);
+    if (!match) return null;
+
+    logger.debug({
+      orderNo: order.orderNo,
+      platform: order.platform,
+      matchKey: key,
+      dbId: match.id,
+      candidateCount: candidates.length,
+    }, 'Order matched');
+
+    return match;
   } catch (err) {
     logger.error({ err, orderNo: order.orderNo }, 'matchOrder threw unexpectedly');
     return null;

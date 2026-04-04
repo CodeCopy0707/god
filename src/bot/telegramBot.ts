@@ -1,12 +1,11 @@
 // ============================================================
-// Telegram Bot — Rate-limited alert sender with retry queue
+// Telegram Bot - Rate-limited alert sender with retry queue
 // ============================================================
 
 import TelegramBot from 'node-telegram-bot-api';
 import { logger } from '../utils/logger.js';
-import type { Order } from '../types/index.js';
+import type { DbAccount, Order } from '../types/index.js';
 
-// ── Bot singleton ─────────────────────────────────────────────────────────
 let _bot: TelegramBot | null = null;
 
 export function getBot(): TelegramBot {
@@ -22,18 +21,17 @@ export function getBot(): TelegramBot {
   return _bot;
 }
 
-// ── Message queue with 1-message-per-2s rate limit ───────────────────────
 interface QueueItem {
-  chatId:  string;
+  chatId: string;
   message: string;
   attempt: number;
 }
 
-const queue:        QueueItem[] = [];
-let   isProcessing: boolean     = false;
+const queue: QueueItem[] = [];
+let isProcessing = false;
 
-const RATE_LIMIT_MS = 2_000;  // max 1 message per 2 s
-const RETRY_DELAY   = 3_000;  // retry after 3 s on failure
+const RATE_LIMIT_MS = 2_000;
+const RETRY_DELAY = 3_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -44,7 +42,9 @@ async function processQueue(): Promise<void> {
   isProcessing = true;
 
   while (queue.length > 0) {
-    const item = queue.shift()!;
+    const item = queue.shift();
+    if (!item) continue;
+
     try {
       await getBot().sendMessage(item.chatId, item.message, {
         parse_mode: 'HTML',
@@ -54,7 +54,6 @@ async function processQueue(): Promise<void> {
       logger.error({ err, attempt: item.attempt }, 'Telegram send failed');
 
       if (item.attempt < 2) {
-        // Retry once after 3 s
         setTimeout(() => {
           queue.unshift({ ...item, attempt: item.attempt + 1 });
           void processQueue();
@@ -72,48 +71,65 @@ async function processQueue(): Promise<void> {
   isProcessing = false;
 }
 
-// ── Format unix timestamp → readable date ─────────────────────────────────
 function formatDate(ts: number): string {
-  // Handle both seconds and milliseconds
-  const ms  = ts > 1e10 ? ts : ts * 1000;
+  const ms = ts > 1e10 ? ts : ts * 1000;
   return new Date(ms).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
 }
 
-// ── Build alert message ───────────────────────────────────────────────────
-function buildMessage(order: Order): string {
-  const amount     = order.amount.toFixed(2);
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function buildMessage(order: Order, matchedAccount?: DbAccount): string {
+  const amount = order.amount.toFixed(2);
   const realAmount = order.realAmount !== undefined
-    ? order.realAmount.toFixed(2) : 'N/A';
-  const reward  = order.reward !== undefined ? String(order.reward) : 'N/A';
-  const userId  = order.userId ?? 'N/A';
-  const time    = formatDate(order.crtDate);
+    ? order.realAmount.toFixed(2)
+    : 'N/A';
+  const reward = order.reward !== undefined ? String(order.reward) : 'N/A';
+  const userId = order.userId ?? 'N/A';
+  const time = formatDate(order.crtDate);
+  const matchedSubagent = matchedAccount?.subagentName
+    ?? matchedAccount?.subagentId
+    ?? 'N/A';
+  const matchedBank = matchedAccount?.bankName ?? 'N/A';
+  const matchedName = matchedAccount?.name ?? 'N/A';
+  const matchedAccountNo = matchedAccount?.acctNo ?? 'N/A';
 
   return [
-    `🏦 <b>PLATFORM: ${order.platform.toUpperCase()}</b>`,
-    `━━━━━━━━━━━━━━━━━━`,
-    `🔔 <b>MATCH FOUND</b>`,
-    `💳 <b>Account:</b> ${order.acctNo}`,
-    `🏛 <b>IFSC:</b> ${order.acctCode}`,
-    `👤 <b>Name:</b> ${order.acctName}`,
+    `🏦 <b>PLATFORM: ${escapeHtml(order.platform.toUpperCase())}</b>`,
+    '━━━━━━━━━━━━━━━━━━',
+    '🔔 <b>MATCH FOUND</b>',
+    `💳 <b>Account:</b> ${escapeHtml(order.acctNo)}`,
+    `🏛 <b>IFSC:</b> ${escapeHtml(order.acctCode)}`,
+    `👤 <b>Name:</b> ${escapeHtml(order.acctName || 'N/A')}`,
     `💰 <b>Amount:</b> ₹${amount}`,
     `💸 <b>Real Amount:</b> ₹${realAmount}`,
     `🎁 <b>Reward:</b> ${reward}`,
-    `🧾 <b>Order No:</b> ${order.orderNo}`,
+    `🧾 <b>Order No:</b> ${escapeHtml(order.orderNo)}`,
     `📌 <b>Status:</b> ${order.orderState}`,
     `⏱ <b>Time:</b> ${time}`,
-    `👤 <b>User ID:</b> ${userId}`,
+    `👤 <b>User ID:</b> ${escapeHtml(userId)}`,
+    `🗂 <b>Matched DB Account:</b> ${escapeHtml(matchedAccountNo)}`,
+    `🏦 <b>Matched Bank:</b> ${escapeHtml(matchedBank)}`,
+    `🧑 <b>Matched Holder:</b> ${escapeHtml(matchedName)}`,
+    `🧭 <b>Subagent:</b> ${escapeHtml(matchedSubagent)}`,
   ].join('\n');
 }
 
-// ── Public API ────────────────────────────────────────────────────────────
-export async function sendTelegramAlert(order: Order): Promise<void> {
+export async function sendTelegramAlert(
+  order: Order,
+  matchedAccount?: DbAccount,
+): Promise<void> {
   const groupId = process.env.TELEGRAM_GROUP_ID;
   if (!groupId) {
-    logger.error('TELEGRAM_GROUP_ID not set — cannot send alert');
+    logger.error('TELEGRAM_GROUP_ID not set - cannot send alert');
     return;
   }
 
-  const message = buildMessage(order);
+  const message = buildMessage(order, matchedAccount);
 
   queue.push({ chatId: groupId, message, attempt: 1 });
   logger.info({ platform: order.platform, orderNo: order.orderNo },
