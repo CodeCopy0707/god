@@ -1,10 +1,10 @@
-﻿import type { PlatformConfig } from '../types/index.js';
+import type { PlatformConfig } from '../types/index.js';
 
 export const platforms: PlatformConfig[] = [
   {
     id: 'goldensizzle',
     baseUrl: 'https://api.goldensizzle.com/investment-products',
-    token: '222205|hqscMqpquD0YBcRcGEv5cF5osTulluRW0y4P0TAm',
+    token: process.env.GOLDENSIZZLE_TOKEN ?? '',
     useBearerAuth: true,
     apiStyle: 'modern',
     headers: {
@@ -25,7 +25,7 @@ export const platforms: PlatformConfig[] = [
   {
     id: 'gmpay',
     baseUrl: 'https://api.gmpay.wiki/xxapi/buyitoken/waitpayerpaymentslip',
-    token: '57f5470f53554be39e87c2d8f0f1c0a4',
+    token: process.env.GMPAY_TOKEN ?? '',
     headers: {
       origin: 'https://web.gmpay.top',
       referer: 'https://web.gmpay.top/',
@@ -41,7 +41,7 @@ export const platforms: PlatformConfig[] = [
   {
     id: 'supercoin',
     baseUrl: 'https://rapi.supercoinpay.com/xxapi/buyitoken/waitpayerpaymentslip',
-    token: 'f49e2f3d2bf84ff993dfeefa4a80707a',
+    token: process.env.SUPERCOIN_TOKEN ?? '',
     headers: {
       origin: 'https://refer.supercoinpay.com',
       referer: 'https://refer.supercoinpay.com/',
@@ -57,7 +57,7 @@ export const platforms: PlatformConfig[] = [
   {
     id: 'milespay',
     baseUrl: 'https://api.gronix.xyz/xxapi/buyitoken/waitpayerpaymentslip',
-    token: '037c65a1542c4d1f9737473248f3918e',
+    token: process.env.MILESPAY_TOKEN ?? '',
     headers: {
       origin: 'https://milesm.skin',
       referer: 'https://milesm.skin/',
@@ -73,7 +73,7 @@ export const platforms: PlatformConfig[] = [
   {
     id: 'gtod',
     baseUrl: 'https://api.crelyn.xyz/xxapi/buyitoken/waitpayerpaymentslip',
-    token: '02a2e360481a419fb5383b41947f1f1f',
+    token: process.env.GTOD_TOKEN ?? '',
     headers: {
       origin: 'https://gtod.top',
       referer: 'https://gtod.top/',
@@ -89,7 +89,7 @@ export const platforms: PlatformConfig[] = [
   {
     id: 'tivrapay',
     baseUrl: 'https://r6w1t4doia.com/xxapi/buyitoken/waitpayerpaymentslip',
-    token: '9acb37fab8a94d2d82e330cfbaef1907',
+    token: process.env.TIVRAPAY_TOKEN ?? '',
     headers: {
       origin: 'https://web.tivrapay.com/',
       referer: 'https://web.tivrapay.com/',
@@ -105,7 +105,7 @@ export const platforms: PlatformConfig[] = [
   {
     id: 'zippay',
     baseUrl: 'https://api.kelura.xyz/xxapi/buyitoken/waitpayerpaymentslip',
-    token: 'cf61e0ef19894d6e9567c8fa21508d07',
+    token: process.env.ZIPPAY_TOKEN ?? '',
     headers: {
       origin: 'https://web.zippay.wiki',
       referer: 'https://web.zippay.wiki/',
@@ -121,7 +121,7 @@ export const platforms: PlatformConfig[] = [
   {
     id: 'floxypay',
     baseUrl: 'https://api.plavix.skin/xxapi/buyitoken/waitpayerpaymentslip',
-    token: 'a3656ac080474b34a35ee3f38d60d4cc',
+    token: process.env.FLOXYPAY_TOKEN ?? '',
     headers: {
       origin: 'https://web.floxypay.ink',
       referer: 'https://web.floxypay.ink/',
@@ -137,7 +137,7 @@ export const platforms: PlatformConfig[] = [
   {
     id: 'linkpay',
     baseUrl: 'https://api.linkpay.homes/xxapi/buyitoken/waitpayerpaymentslip',
-    token: '24b9c170f2aa4d26a99733c605c14ad3',
+    token: process.env.LINKPAY_TOKEN ?? '',
     headers: {
       origin: 'https://linkpays-in.com',
       referer: 'https://linkpays-in.com/',
@@ -152,4 +152,15 @@ export const platforms: PlatformConfig[] = [
   },
 ];
 
-export const activePlatforms: PlatformConfig[] = platforms;
+// Runtime validation - warn about missing tokens
+const missingTokens = platforms.filter(p => !p.token);
+
+if (missingTokens.length > 0) {
+  const ids = missingTokens.map(p => p.id).join(', ');
+  console.warn(
+    `âš ï¸ [platforms.ts] ${missingTokens.length} platform(s) are missing tokens in .env and will be SKIPPED: ${ids}`
+  );
+}
+
+// Export only platforms with a token configured
+export const activePlatforms: PlatformConfig[] = platforms.filter(p => !!p.token);
