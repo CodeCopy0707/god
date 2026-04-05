@@ -1,4 +1,4 @@
-﻿import { sendTelegramAlert } from '../bot/telegramBot.js';
+import { sendTelegramAlert } from '../bot/telegramBot.js';
 import {
   emitDashboardRefresh,
   recordMatchedOrder,
@@ -92,7 +92,7 @@ async function runPlatformLoop(
   stopSignal: { stopped: boolean },
 ): Promise<void> {
   const platformLog = logger.child({ platform: platform.id });
-  const seenOrders = new Set<string>();
+  const seenOrders = new Map<string, number>();
   let lastReset = Date.now();
 
   platformLog.info('Polling loop started');
@@ -100,9 +100,17 @@ async function runPlatformLoop(
   while (!stopSignal.stopped) {
     try {
       if (Date.now() - lastReset >= SEEN_RESET_MS()) {
-        seenOrders.clear();
-        lastReset = Date.now();
-        platformLog.debug('seenOrders cache cleared');
+        const now = Date.now();
+        const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+        let deleted = 0;
+        for (const [key, ts] of seenOrders.entries()) {
+          if (now - ts > maxAge) {
+            seenOrders.delete(key);
+            deleted++;
+          }
+        }
+        lastReset = now;
+        platformLog.debug(`seenOrders cache pruned (${deleted} old orders removed)`);
       }
 
       const accountSnapshot = await loadAccountSnapshot();
@@ -118,7 +126,7 @@ async function runPlatformLoop(
               const key = order.orderNo || order.rptNo || '';
               if (!key || seenOrders.has(key)) continue;
 
-              seenOrders.add(key);
+              seenOrders.set(key, Date.now());
 
               try {
                 const match = matchOrder(order, accountSnapshot.matchIndex);
