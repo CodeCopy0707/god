@@ -2,21 +2,16 @@ import type { PlatformConfig } from '../types/index.js';
 
 export const platforms: PlatformConfig[] = [
   {
-    id: 'goldensizzle',
-    baseUrl: 'https://api.goldensizzle.com/investment-products',
-    token: process.env.GOLDENSIZZLE_TOKEN ?? '',
-    useBearerAuth: true,
-    apiStyle: 'modern',
+    id: 'sixpay',
+    baseUrl: 'https://api.sixpay88.com/xxapi/buyitoken/waitpayerpaymentslip',
+    token: process.env.SIXPAY_TOKEN ?? '',
     headers: {
-      origin: 'https://ynwww.goldensizzle.com',
-      referer: 'https://ynwww.goldensizzle.com/',
-    },
-    customHeaders: {
-      'x-version': '1',
+      origin: 'https://api.sixpay88.com',
+      referer: 'https://api.sixpay88.com/',
     },
     customParams: {
-      type: 'all',
-      sort_by: 'desc',
+      method: '0',
+      date_asc: '0',
     },
     pollIntervalMs: 1000,
     maxPages: 20,
