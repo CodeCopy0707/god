@@ -44,7 +44,10 @@ function normaliseOrder(raw: RawOrder, platformId: string): Order | null {
       if (!isNaN(parsed)) crtDate = Math.floor(parsed / 1000);
     }
 
-    if (!orderNo || !acctNo || !acctCode) return null;
+    if (!orderNo || !acctNo || !acctCode) {
+      logger.warn({ platformId, orderNo, acctNo, acctCode, raw }, 'Missing required fields in raw order');
+      return null;
+    }
 
     return {
       platform: platformId,
@@ -79,7 +82,10 @@ function normaliseOrder(raw: RawOrder, platformId: string): Order | null {
 }
 
 function extractOrders(body: RawOrderResponse): RawOrder[] {
-  if (body.code !== undefined && body.code !== 0) return [];
+  if (body.code !== undefined && Number(body.code) !== 0 && Number(body.code) !== 200) {
+    logger.warn({ code: body.code }, 'API returned a non-zero/non-200 code');
+    return [];
+  }
 
   if (Array.isArray(body.data?.products)) return body.data.products;
   if (Array.isArray(body.data?.list)) return body.data.list;
@@ -149,9 +155,15 @@ async function fetchSinglePage(
     }
 
     const text = await res.text();
+    logger.trace({ platform: platform.id, page, textLength: text.length, snippet: text.substring(0, 500) }, 'Raw API Response received');
     const body = JSON.parse(text) as RawOrderResponse;
 
-    return { rawRows: extractOrders(body) };
+    const extracted = extractOrders(body) || [];
+    if (extracted.length === 0) {
+      logger.warn({ platform: platform.id, page, snippet: text.substring(0, 1000) }, '0 orders extracted from response body');
+    }
+
+    return { rawRows: extracted };
   } catch (err: any) {
     return { rawRows: [], error: err.message };
   }
@@ -186,10 +198,16 @@ function normalisePageOrders(
   for (const raw of rawRows) {
     const order = normaliseOrder(raw, platformId);
     if (!order) continue;
-    if (order.amount < minAmount) continue;
+    if (order.amount < minAmount) {
+      logger.debug({ platformId, amount: order.amount, minAmount }, 'Order rejected: below MIN_AMOUNT');
+      continue;
+    }
 
     const dedupeKey = order.orderNo || order.rptNo || '';
-    if (!dedupeKey || seenKeys.has(dedupeKey)) continue;
+    if (!dedupeKey || seenKeys.has(dedupeKey)) {
+      logger.debug({ platformId, dedupeKey }, 'Order rejected: duplicate (seenKeys)');
+      continue;
+    }
 
     seenKeys.add(dedupeKey);
     orders.push(order);
@@ -246,6 +264,8 @@ export async function scanPlatformOrders(
         reachedLastPage = true;
       }
 
+      onProgress?.(platform.id, page, rawRows.length);
+
       const orders = normalisePageOrders(
         rawRows,
         platform.id,
@@ -253,10 +273,12 @@ export async function scanPlatformOrders(
         seenKeys,
       );
 
-      if (orders.length === 0) continue;
+      if (orders.length === 0) {
+        logger.debug({ platform: platform.id, page }, 'All raw rows on page were filtered out');
+        continue;
+      }
 
       totalOrders += orders.length;
-      onProgress?.(platform.id, page, orders.length);
       await onOrders(orders, { page, totalOrders });
     }
 

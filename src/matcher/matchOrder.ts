@@ -76,10 +76,14 @@ export function matchOrder(
 ): DbAccount | null {
   try {
     const key = getMatchKey(order.acctNo, order.acctCode);
-    if (!key) return null;
+    if (!key) {
+      logger.debug({ orderNo: order.orderNo, acctNo: order.acctNo, acctCode: order.acctCode }, 'Order unmatched: invalid match key (short acctNo/ifsc)');
+      return null;
+    }
 
     const candidates = matchIndex.get(key);
     if (!candidates || candidates.length === 0) {
+      logger.debug({ orderNo: order.orderNo, matchKey: key }, 'Order unmatched: no DB candidates found for match key');
       return null;
     }
 
