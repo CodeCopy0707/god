@@ -77,6 +77,7 @@ export function getSupabaseClient(): SupabaseClient {
 
 let cache: AccountSnapshot | null = null;
 let inFlightSnapshot: Promise<AccountSnapshot> | null = null;
+let refreshInterval: NodeJS.Timeout | null = null;
 
 const DB_REFRESH_MS = (): number =>
   Number(process.env.DB_REFRESH_INTERVAL_MS ?? 60_000);
@@ -90,12 +91,22 @@ const TARGET_SUBAGENT_ID = (): string | null =>
 const MATCH_ALL = (): boolean =>
   (process.env.MATCH_ALL_RECORDS ?? 'false').toLowerCase() === 'true';
 
+export function getSyncAccountSnapshot(): AccountSnapshot | null {
+  return cache;
+}
+
+export function startBackgroundDbRefresh(): void {
+  if (refreshInterval) return;
+  
+  refreshInterval = setInterval(() => {
+    void loadAccountSnapshot();
+  }, DB_REFRESH_MS());
+  
+  logger.info({ intervalMs: DB_REFRESH_MS() }, 'Background DB refresh started');
+}
+
 export async function loadAccountSnapshot(): Promise<AccountSnapshot> {
   const now = Date.now();
-
-  if (cache && now - cache.fetchedAt < DB_REFRESH_MS()) {
-    return cache;
-  }
 
   if (inFlightSnapshot) {
     return inFlightSnapshot;
@@ -107,12 +118,6 @@ export async function loadAccountSnapshot(): Promise<AccountSnapshot> {
       const table = TABLE_NAME();
       const matchAll = MATCH_ALL();
       const targetId = TARGET_SUBAGENT_ID();
-
-      logger.debug({
-        table,
-        matchAll,
-        targetSubagentId: targetId ?? 'ALL',
-      }, 'Loading accounts from Supabase...');
 
       let query = supabase
         .from(table)
@@ -147,21 +152,12 @@ export async function loadAccountSnapshot(): Promise<AccountSnapshot> {
         fetchedAt: now,
       };
 
-      logger.info({
-        count: accounts.length,
-        matchBuckets: cache.matchIndex.size,
-        table,
-        matchAll,
-        targetSubagent: matchAll ? 'ALL' : (targetId ?? 'ALL'),
-      }, 'Accounts loaded from Supabase');
-
       return cache;
     } catch (err) {
       if (cache) {
-        logger.warn({ err }, 'Supabase refresh failed - using stale cache');
+        logger.warn({ err }, 'Supabase background refresh failed - using stale cache');
         return cache;
       }
-
       logger.error({ err }, 'Supabase initial load failed');
       throw err;
     } finally {
@@ -175,6 +171,13 @@ export async function loadAccountSnapshot(): Promise<AccountSnapshot> {
 export async function loadAccounts(): Promise<DbAccount[]> {
   const snapshot = await loadAccountSnapshot();
   return snapshot.accounts;
+}
+
+export function stopBackgroundDbRefresh(): void {
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+    refreshInterval = null;
+  }
 }
 
 export function invalidateCache(): void {

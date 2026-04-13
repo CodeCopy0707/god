@@ -104,7 +104,7 @@ function buildUrl(platform: PlatformConfig, page: number): string {
     [isModern ? 'page_num' : 'page']: String(page),
     [isModern ? 'page_size' : 'limit']: String(platform.pageSize),
     if_asc: 'false',
-    min_amount: String(Number(process.env.MIN_AMOUNT ?? 5000)),
+    min_amount: String(Number(process.env.FETCH_MIN_AMOUNT ?? process.env.MIN_AMOUNT ?? 9000)),
     max_amount: '100000000',
     method: '1',
     date_asc: '1',
@@ -126,6 +126,7 @@ function buildUrl(platform: PlatformConfig, page: number): string {
 async function fetchSinglePage(
   platform: PlatformConfig,
   page: number,
+  attempt = 1,
 ): Promise<PageResult> {
   const url = buildUrl(platform, page);
 
@@ -151,6 +152,11 @@ async function fetchSinglePage(
     });
 
     if (!res.ok) {
+      if (attempt < 3) {
+        logger.warn({ platform: platform.id, page, attempt, status: res.status }, 'Fetch returned error status, retrying...');
+        await new Promise(r => setTimeout(r, 300));
+        return fetchSinglePage(platform, page, attempt + 1);
+      }
       return { rawRows: [], error: `HTTP ${res.status}` };
     }
 
@@ -165,6 +171,11 @@ async function fetchSinglePage(
 
     return { rawRows: extracted };
   } catch (err: any) {
+    if (attempt < 3) {
+      logger.warn({ platform: platform.id, page, attempt, error: err.message }, 'Fetch failed, retrying...');
+      await new Promise(r => setTimeout(r, 300));
+      return fetchSinglePage(platform, page, attempt + 1);
+    }
     return { rawRows: [], error: err.message };
   }
 }
@@ -222,7 +233,7 @@ export async function scanPlatformOrders(
   onProgress?: (platformId: string, page: number, count: number) => void,
 ): Promise<number> {
   const seenKeys = new Set<string>();
-  const minAmount = Number(process.env.MIN_AMOUNT ?? 5000);
+  const minAmount = Number(process.env.MIN_AMOUNT ?? 9000);
   const maxPages = getPlatformMaxPages(platform);
   const batchSize = getFetchPageBatchSize(maxPages);
   let totalOrders = 0;

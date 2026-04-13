@@ -17,7 +17,7 @@ function normaliseAccountTail(value: string): string {
   const digitsOnly = trimmed.replace(/\D/g, '');
   const source = digitsOnly.length >= 4
     ? digitsOnly
-    : trimmed.replace(/\s+/g, '');
+    : trimmed.replace(/[\s\W_]+/g, '').toUpperCase(); // strip all specials, spaces and uppercase
 
   return source.slice(-4);
 }

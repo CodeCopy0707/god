@@ -4,7 +4,7 @@ import {
   recordMatchedOrder,
   recordObservedOrders,
 } from '../dashboard/store.js';
-import { loadAccountSnapshot } from '../db/supabase.js';
+import { getSyncAccountSnapshot } from '../db/supabase.js';
 import { scanPlatformOrders } from '../fetcher/fetchPlatform.js';
 import { matchOrder } from '../matcher/matchOrder.js';
 import type { PlatformConfig, PlatformStatusSnapshot } from '../types/index.js';
@@ -113,7 +113,11 @@ async function runPlatformLoop(
         platformLog.debug(`seenOrders cache pruned (${deleted} old orders removed)`);
       }
 
-      const accountSnapshot = await loadAccountSnapshot();
+      const accountSnapshot = getSyncAccountSnapshot();
+      if (!accountSnapshot) {
+        await sleep(1000);
+        continue;
+      }
       let fetchedCount = 0;
 
       try {

@@ -1,8 +1,8 @@
-﻿import 'dotenv/config';
+import 'dotenv/config';
 import { getBot, sendRawMessage, sendStartupGreeting } from './bot/telegramBot.js';
 import { activePlatforms as platforms } from './config/platforms.js';
 import { startDashboardServer } from './dashboard/server.js';
-import { loadAccountSnapshot } from './db/supabase.js';
+import { loadAccountSnapshot, startBackgroundDbRefresh } from './db/supabase.js';
 import { getDashboardString, startPolling } from './orchestrator/poller.js';
 import { logger } from './utils/logger.js';
 
@@ -50,6 +50,9 @@ async function main(): Promise<void> {
     logger.error({ err }, 'Failed to load accounts from Supabase - exiting');
     process.exit(1);
   }
+
+  // Start background auto-refresher for ultra fast polling
+  startBackgroundDbRefresh();
 
   const { stop } = startPolling(platforms);
   const dashboardServer = startDashboardServer();
