@@ -2,7 +2,11 @@ import 'dotenv/config';
 import { getBot, sendRawMessage, sendStartupGreeting } from './bot/telegramBot.js';
 import { activePlatforms as platforms } from './config/platforms.js';
 import { startDashboardServer } from './dashboard/server.js';
-import { loadAccountSnapshot, startBackgroundDbRefresh } from './db/supabase.js';
+import {
+  loadAccountSnapshot,
+  startBackgroundDbRefresh,
+  stopBackgroundDbRefresh,
+} from './db/supabase.js';
 import { getDashboardString, startPolling } from './orchestrator/poller.js';
 import { logger } from './utils/logger.js';
 
@@ -89,6 +93,7 @@ async function main(): Promise<void> {
 
     logger.info({ signal }, 'Shutdown signal received - stopping services...');
     stop();
+    stopBackgroundDbRefresh();
 
     void dashboardServer.stop()
       .then(() => {

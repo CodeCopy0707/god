@@ -14,6 +14,10 @@ export interface PlatformConfig {
   apiStyle?: 'default' | 'modern';
   customHeaders?: Record<string, string>;
   customParams?: Record<string, string>;
+  requestTimeoutMs?: number;
+  freshnessLookbackSeconds?: number;
+  stalePageThreshold?: number;
+  failureBackoffMs?: number;
 }
 
 export interface Order {
@@ -64,6 +68,13 @@ export interface PlatformStatusSnapshot {
   lastRunSuccess: boolean;
   lastResultsCount: number;
   totalMatchesFound: number;
+  inFlight: boolean;
+  lastCycleStartedAt: string | null;
+  lastCycleDurationMs: number;
+  lastScanPages: number;
+  consecutiveFailures: number;
+  lastError: string | null;
+  lastFreshOrderAt: string | null;
 }
 
 export interface ObservedOrderEvent {

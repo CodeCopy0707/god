@@ -253,7 +253,14 @@ export function renderDashboardPage(adminId: string): string {
       </section>
     </main>
     <script>
+      const escapeHtml = (value) => String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
       const formatTime = (value) => value ? new Date(value).toLocaleString() : 'Never';
+      const formatDuration = (value) => Number.isFinite(value) && value > 0 ? value + ' ms' : '-';
       const formatMoney = (value) => typeof value === 'number' ? value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
       const byId = (id) => document.getElementById(id);
 
@@ -268,12 +275,17 @@ export function renderDashboardPage(adminId: string): string {
       }
 
       function renderPlatforms(snapshot) {
+        const renderState = (platform) => {
+          if (platform.inFlight) return 'RUNNING';
+          return platform.lastRunSuccess ? 'OK' : 'FAIL';
+        };
+
         byId('platform-table').innerHTML = snapshot.platforms.map((platform) => '<tr>'
-          + '<td><strong>' + platform.platformId.toUpperCase() + '</strong></td>'
-          + '<td class="' + (platform.lastRunSuccess ? 'ok' : 'fail') + '">' + (platform.lastRunSuccess ? 'OK' : 'FAIL') + '</td>'
+          + '<td><strong>' + platform.platformId.toUpperCase() + '</strong><div class="muted">Pages ' + platform.lastScanPages + ' | Cycle ' + formatDuration(platform.lastCycleDurationMs) + '</div></td>'
+          + '<td class="' + (platform.inFlight ? 'ok' : (platform.lastRunSuccess ? 'ok' : 'fail')) + '">' + renderState(platform) + '</td>'
           + '<td>' + platform.lastResultsCount + '</td>'
           + '<td>' + platform.totalMatchesFound + '</td>'
-          + '<td>' + formatTime(platform.lastPoll) + '</td>'
+          + '<td>' + formatTime(platform.lastPoll) + '<div class="muted">Failures ' + platform.consecutiveFailures + '</div>' + (platform.lastError ? '<div class="muted">' + escapeHtml(platform.lastError) + '</div>' : '') + '</td>'
           + '</tr>').join('') || '<tr><td colspan="5" class="muted">No platform activity yet.</td></tr>';
       }
 
