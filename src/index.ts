@@ -79,11 +79,12 @@ async function main(): Promise<void> {
     });
   });
 
-  void sendStartupGreeting(platforms.length);
-
-  setTimeout(() => {
-    void sendRawMessage(getDashboardString());
-  }, 2000);
+  // Automatic startup messages disabled per user request
+  // void sendStartupGreeting(platforms.length);
+  //
+  // setTimeout(() => {
+  //   void sendRawMessage(getDashboardString());
+  // }, 2000);
 
   let shutdownStarted = false;
 
@@ -113,16 +114,16 @@ async function main(): Promise<void> {
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
-  process.on('uncaughtException', err => {
+  process.on('uncaughtException', (err) => {
     logger.error({ err }, 'Uncaught exception');
   });
 
-  process.on('unhandledRejection', reason => {
+  process.on('unhandledRejection', (reason) => {
     logger.error({ reason }, 'Unhandled promise rejection');
   });
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('Fatal startup error:', err);
   process.exit(1);
 });
