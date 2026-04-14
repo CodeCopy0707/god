@@ -2,22 +2,6 @@ import type { PlatformConfig } from '../types/index.js';
 
 export const platforms: PlatformConfig[] = [
   {
-    id: 'sixpay',
-    baseUrl: 'https://api.sixpay88.com/xxapi/buyitoken/waitpayerpaymentslip',
-    token: process.env.SIXPAY_TOKEN ?? '',
-    headers: {
-      origin: 'https://api.sixpay88.com',
-      referer: 'https://api.sixpay88.com/',
-    },
-    customParams: {
-      method: '0',
-      date_asc: '0',
-    },
-    pollIntervalMs: 1000,
-    maxPages: 20,
-    pageSize: 50,
-  },
-  {
     id: 'gmpay',
     baseUrl: 'https://api.gmpay.wiki/xxapi/buyitoken/waitpayerpaymentslip',
     token: process.env.GMPAY_TOKEN ?? '',
@@ -139,6 +123,38 @@ export const platforms: PlatformConfig[] = [
     },
     customParams: {
       method: '0',
+      date_asc: '0',
+    },
+    pollIntervalMs: 1000,
+    maxPages: 20,
+    pageSize: 50,
+  },
+  {
+    id: 'vvpay',
+    baseUrl: 'https://qonix.click/xxapi/buyitoken/waitpayerpaymentslip',
+    token: process.env.VVPAY_TOKEN ?? '',
+    headers: {
+      origin: 'https://vivipay1.com',
+      referer: 'https://vivipay1.com/',
+    },
+    customParams: {
+      method: '1',
+      date_asc: '0',
+    },
+    pollIntervalMs: 1000,
+    maxPages: 20,
+    pageSize: 50,
+  },
+  {
+    id: 'iplpay',
+    baseUrl: 'https://api.igni.ink/xxapi/buyitoken/waitpayerpaymentslip',
+    token: process.env.IPLPAY_TOKEN ?? '',
+    headers: {
+      origin: 'https://refer.iplp2p.top',
+      referer: 'https://refer.iplp2p.top/',
+    },
+    customParams: {
+      method: '1',
       date_asc: '0',
     },
     pollIntervalMs: 1000,

@@ -72,7 +72,7 @@ const FAILURE_BACKOFF_BASE_MS = (platform: PlatformConfig): number => {
   if (!Number.isFinite(configured) || configured < 500) {
     return 2000;
   }
-
+  
   return Math.floor(configured);
 };
 
